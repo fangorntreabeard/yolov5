@@ -166,7 +166,7 @@ def run(
                         line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
                         with open(f'{txt_path}.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
-                        with open(f'{Path(save_path).parent}/confidence.txt', 'a+') as f:
+                        with open(f'/confidence.txt', 'a+') as f:
                             f.write(f'{Path(txt_path).name}\t{cls}\t{conf}\n')
                     if save_img or save_crop or view_img:  # Add bbox to image
                         c = int(cls)  # integer class
