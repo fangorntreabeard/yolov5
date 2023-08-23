@@ -32,7 +32,9 @@ class Callbacks:
             'on_model_save': [],
             'on_train_end': [],
             'on_params_update': [],
-            'teardown': [],}
+            'teardown': [],
+            'on_al_1': [], # kav
+            }
         self.stop_training = False  # set True to interrupt training
 
     def register_action(self, hook, name='', callback=None):
