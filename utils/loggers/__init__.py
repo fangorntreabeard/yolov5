@@ -389,7 +389,7 @@ class Loggers():
         d = [round(x, 5) for x in d]
         m = [round(x, 5) for x in m]
         w = [round(x, 5) for x in w]
-        with open(save_dir / 'al.json', 'w') as f:
+        with open(save_dir / 'al_weights.json', 'w') as f:
             json.dump({'w': w,
                            'd': d,
                            'm': m}, f)
