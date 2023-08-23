@@ -139,12 +139,12 @@ def set_logging(name=LOGGING_NAME, verbose=True):
             name: {
                 'class': 'logging.StreamHandler',
                 'formatter': name,
-                'level': level,}},
+                'level': level, }},
         'loggers': {
             name: {
                 'level': level,
                 'handlers': [name],
-                'propagate': False,}}})
+                'propagate': False, }}})
 
 
 set_logging(LOGGING_NAME)  # run before defining LOGGER
@@ -416,7 +416,7 @@ def check_imshow(warn=False):
         return False
 
 
-def check_suffix(file='yolov5s.pt', suffix=('.pt',), msg=''):
+def check_suffix(file='yolov5s.pt', suffix=('.pt', ), msg=''):
     # Check file(s) for acceptable suffix
     if file and suffix:
         if isinstance(suffix, str):
@@ -863,6 +863,7 @@ def non_max_suppression(
         labels=(),
         max_det=300,
         nm=0,  # number of masks
+        all_class=False, #kav
 ):
     """Non-Maximum Suppression (NMS) on inference results to reject overlapping detections
 
@@ -927,6 +928,9 @@ def non_max_suppression(
             x = torch.cat((box[i], x[i, 5 + j, None], j[:, None].float(), mask[i]), 1)
         else:  # best class only
             conf, j = x[:, 5:mi].max(1, keepdim=True)
+            # kav
+            if all_class:
+                x_all_class = torch.cat((box, conf, j.float(), x[:, 5:mi]), 1)[conf.view(-1) > conf_thres]
             x = torch.cat((box, conf, j.float(), mask), 1)[conf.view(-1) > conf_thres]
 
         # Filter by class
@@ -942,6 +946,9 @@ def non_max_suppression(
         if not n:  # no boxes
             continue
         x = x[x[:, 4].argsort(descending=True)[:max_nms]]  # sort by confidence and remove excess boxes
+        # kav
+        if all_class:
+            x_all_class = x_all_class[x_all_class[:, 4].argsort(descending=True)[:max_nms]]
 
         # Batched NMS
         c = x[:, 5:6] * (0 if agnostic else max_wh)  # classes
@@ -957,6 +964,9 @@ def non_max_suppression(
                 i = i[iou.sum(1) > 1]  # require redundancy
 
         output[xi] = x[i]
+        # kav
+        if all_class:
+            output[xi] = x_all_class[i]
         if mps:
             output[xi] = output[xi].to(device)
         if (time.time() - t) > time_limit:
