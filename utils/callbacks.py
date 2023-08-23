@@ -33,7 +33,7 @@ class Callbacks:
             'on_train_end': [],
             'on_params_update': [],
             'teardown': [],
-            'on_al_1': [], # kav
+            'weights_al': [], # kav
             }
         self.stop_training = False  # set True to interrupt training
 
