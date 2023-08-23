@@ -382,7 +382,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
             log_vals = list(mloss) + list(results) + lr
             callbacks.run('on_fit_epoch_end', log_vals, epoch, best_fitness, fi)
             # kav
-            callbacks.run('on_al_1', data=data_dict, model=ema.ema, dataloader=train_loader, m=mi, d=di,
+            callbacks.run('weights_al', data=data_dict, model=ema.ema, dataloader=train_loader, m=mi, d=di,
                           save_dir=save_dir)
 
             # Save model
