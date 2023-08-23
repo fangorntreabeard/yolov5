@@ -16,6 +16,13 @@ from utils.loggers.wandb.wandb_utils import WandbLogger
 from utils.plots import plot_images, plot_labels, plot_results
 from utils.torch_utils import de_parallel
 
+# kav
+from utils.general import non_max_suppression, xywh2xyxy
+from utils.plots import output_to_target
+import numpy as np
+import json
+import math
+
 LOGGERS = ('csv', 'tb', 'wandb', 'clearml', 'comet')  # *.csv, TensorBoard, Weights & Biases, ClearML
 RANK = int(os.getenv('RANK', -1))
 
@@ -303,6 +310,89 @@ class Loggers():
             self.wandb.wandb_run.config.update(params, allow_val_change=True)
         if self.comet_logger:
             self.comet_logger.on_params_update(params)
+
+    # kav
+    def weights_al(self, data, model, dataloader, m, d, save_dir):
+        def iou_numpy(outputs: np.array, labels: np.array):
+            SMOOTH = 1e-6
+            intersection = (outputs & labels).sum()
+            if intersection == 0:
+                return 0
+            else:
+                union = (outputs | labels).sum()
+                iou = (intersection + SMOOTH) / (union + SMOOTH)
+                return iou
+        device, pt, jit, engine = next(model.parameters()).device, True, False, False  # get model device, PyTorch model
+        model.float()
+        model.eval()
+        cuda = device.type != 'cpu'
+        nc = int(data['nc'])  # number of classes
+        pre = [[] for _ in range(nc)]
+        for batch_i, (im, targets, paths, shapes) in enumerate(dataloader):
+            if cuda:
+                im = im.to(device, non_blocking=True)
+                targets = targets.to(device)
+            im = im.float()  # uint8 to fp16/32
+            im /= 255  # 0 - 255 to 0.0 - 1.0
+            nb, _, height, width = im.shape  # batch size, channels, height, width
+            preds = model(im)
+            targets[:, 2:] *= torch.tensor((width, height, width, height), device=device)  # to pixels
+            lb = []  # for autolabelling
+
+            preds = non_max_suppression(preds,
+                                        conf_thres=0.05,
+                                        iou_thres=0.6,
+                                        multi_label=False,
+                                        agnostic=True,
+                                        max_det=100,
+                                        )
+            pboxes = output_to_target(preds)
+            for si in range(nb):
+                labels = targets[targets[:, 0] == si, 1:]
+                tbox = xywh2xyxy(labels[:, 1:5]).cpu().numpy()
+                labels2 = pboxes[pboxes[:, 0] == si, 1:]
+                pbox = xywh2xyxy(labels2[:, 1:5])
+                for tl in range(len(tbox)):
+                    bestiou = 0
+                    best_line = None
+                    mask1 = np.zeros((height, width), dtype=np.uint8)  # initialize mask
+                    xmin, ymin, xmax, ymax = [int(v) for v in tbox[tl]]
+                    mask1[ymin:ymax, xmin:xmax] = 1
+                    for pl in range(len(pbox)):
+                        if labels[tl][0].item() == labels2[pl][0].item():
+                            mask2 = np.zeros((height, width), dtype=np.uint8)  # initialize mask
+                            xmin, ymin, xmax, ymax = [int(v) for v in pbox[pl]]
+                            mask2[ymin:ymax, xmin:xmax] = 1
+
+                            iou = iou_numpy(mask1, mask2)
+                            if bestiou < iou:
+                                bestiou = iou
+                                best_line = pl
+                    if bestiou > 0:
+                        indx = int(labels[tl][0].item())
+                        a = pre[indx]
+                        a.append([bestiou, labels2[best_line][-1]])
+                        pre[indx] = a
+        epsilon = 0.6
+        alfa = 0.3
+        beta = 0.2
+        gamma = math.exp(1/alfa) - 1
+        for i, cl in enumerate(pre):
+            if len(cl) == 0:
+                # d[i] = m[i] * d[i]
+                m[i] = 0.99 * m[i]
+            else:
+                d[i] = m[i] * d[i] + (1 - m[i]) * sum(
+                    [(1 - (x[1] ** epsilon) * (x[0] ** (1 - epsilon))) for x in cl]) / len(cl)
+                m[i] = 0.99
+        w = [1 + alfa*beta * math.log(1 + gamma*x) for x in d]
+        d = [round(x, 5) for x in d]
+        m = [round(x, 5) for x in m]
+        w = [round(x, 5) for x in w]
+        with open(save_dir / 'al.json', 'w') as f:
+            json.dump({'w': w,
+                           'd': d,
+                           'm': m}, f)
 
 
 class GenericLogger:
